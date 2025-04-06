@@ -1,0 +1,149 @@
+import tkinter as tk
+from tkinter import messagebox, ttk
+
+# Alíquotas padrão (sem IRPJ)
+ALIQUOTAS = {
+    'Simples_Prestador': {'INSS': 0.11},
+    'Simples_Terceirizada': {'INSS': 0.20, 'IRRF': 0.015},
+    'NaoSimples_Prestador': {'PIS': 0.0065, 'COFINS': 0.03, 'CSLL': 0.01},
+    'NaoSimples_Terceirizada': {'INSS': 0.20, 'CSLL': 0.01}
+}
+
+def calcular_impostos():
+    try:
+        valor_str = entry_valor.get().replace('.', '').replace(',', '.')
+        valor = float(valor_str)
+        simples = var_simples.get()
+        tipo = tipo_empresa.get()
+
+        if simples:
+            chave = 'Simples_Terceirizada' if tipo == "terceirizada" else 'Simples_Prestador'
+        else:
+            chave = 'NaoSimples_Terceirizada' if tipo == "terceirizada" else 'NaoSimples_Prestador'
+
+        impostos = {}
+        pcc_total = 0
+        tem_pcc = all(imposto in ALIQUOTAS[chave] for imposto in ['PIS', 'COFINS', 'CSLL'])
+
+        for nome, aliq in ALIQUOTAS[chave].items():
+            valor_imposto = valor * aliq
+            impostos[nome] = valor_imposto
+            if nome in ['PIS', 'COFINS', 'CSLL']:
+                pcc_total += valor_imposto
+
+        # ISS como campo manual
+        iss_str = entry_iss.get().replace(',', '.')
+        iss_aliquota = float(iss_str) / 100
+        iss_valor = valor * iss_aliquota
+        impostos['ISS'] = iss_valor
+
+        total = sum(impostos.values())
+
+        resultado = "Impostos calculados:\n\n"
+        for nome, val in impostos.items():
+            resultado += f"{nome}: R$ {val:.2f}\n"
+        if tem_pcc:
+            resultado += f"PCC (PIS+COFINS+CSLL): R$ {pcc_total:.2f}\n"
+        resultado += f"\nTotal: R$ {total:.2f}"
+
+        label_resultado.config(text=resultado)
+
+    except ValueError:
+        messagebox.showerror("Erro", "Informe um valor válido para a nota fiscal e alíquota do ISS.")
+
+def salvar_config():
+    try:
+        for chave in ALIQUOTAS:
+            for imposto in ALIQUOTAS[chave]:
+                texto = campos_aliquotas[chave][imposto].get().replace(',', '.')
+                valor_percentual = float(texto)
+                ALIQUOTAS[chave][imposto] = valor_percentual / 100
+        messagebox.showinfo("Sucesso", "Alíquotas atualizadas com sucesso.")
+    except ValueError:
+        messagebox.showerror("Erro", "Digite valores válidos para as alíquotas (ex: 2,5)")
+
+def desbloquear_config():
+    if senha_entry.get() == "123456":
+        for chave in campos_aliquotas:
+            for campo in campos_aliquotas[chave].values():
+                campo.configure(state="normal")
+        btn_salvar.configure(state="normal")
+        messagebox.showinfo("Acesso liberado", "Você pode editar as alíquotas agora.")
+    else:
+        messagebox.showerror("Senha incorreta", "Senha inválida.")
+
+def disable_config_fields():
+    for chave in campos_aliquotas:
+        for campo in campos_aliquotas[chave].values():
+            campo.configure(state="disabled")
+    btn_salvar.configure(state="disabled")
+
+# Interface
+janela = tk.Tk()
+janela.title("Calculadora de Impostos")
+janela.geometry("300x500")
+
+abas = ttk.Notebook(janela)
+abas.pack(expand=True, fill="both")
+
+# --- Aba Principal ---
+frame_principal = ttk.Frame(abas)
+abas.add(frame_principal, text="Calculadora")
+
+frame_iss = tk.Frame(frame_principal)
+frame_iss.pack(anchor="w", pady=(10, 0), padx=10)
+tk.Label(frame_iss, text="ISS PADRÃO 2%:").pack(side="left")
+entry_iss = tk.Entry(frame_iss, width=6)
+entry_iss.insert(0, "2,00")
+entry_iss.pack(side="left")
+
+tk.Label(frame_principal, text="Valor da Nota Fiscal (R$):").pack(pady=5)
+entry_valor = tk.Entry(frame_principal)
+entry_valor.pack()
+
+var_simples = tk.BooleanVar()
+tipo_empresa = tk.StringVar(value="prestador")  # valor inicial
+
+tk.Checkbutton(frame_principal, text="Optante Simples Nacional", variable=var_simples).pack(pady=5)
+
+frame_tipo = tk.Frame(frame_principal)
+frame_tipo.pack(pady=5)
+
+tk.Label(frame_tipo, text="Tipo de Empresa:").pack()
+tk.Radiobutton(frame_tipo, text="Prestador de Serviço", variable=tipo_empresa, value="prestador").pack(anchor="w")
+tk.Radiobutton(frame_tipo, text="Terceirizada", variable=tipo_empresa, value="terceirizada").pack(anchor="w")
+
+tk.Button(frame_principal, text="OK", command=calcular_impostos).pack(pady=10)
+
+label_resultado = tk.Label(frame_principal, text="", justify="left")
+label_resultado.pack(pady=10)
+
+# --- Aba de Configuração ---
+frame_config = ttk.Frame(abas)
+abas.add(frame_config, text="Configurações")
+
+tk.Label(frame_config, text="Digite a senha para editar:").pack()
+senha_entry = tk.Entry(frame_config, show="*")
+senha_entry.pack()
+tk.Button(frame_config, text="Desbloquear", command=desbloquear_config).pack(pady=5)
+
+campos_aliquotas = {}
+
+for chave in ALIQUOTAS:
+    tk.Label(frame_config, text=f"{chave.replace('_', ' ')}", font=("Arial", 10, "bold")).pack(pady=3)
+    campos_aliquotas[chave] = {}
+    for imposto, valor in ALIQUOTAS[chave].items():
+        frame_linha = tk.Frame(frame_config)
+        frame_linha.pack()
+        tk.Label(frame_linha, text=f"{imposto} (%): ").pack(side="left")
+        campo = tk.Entry(frame_linha, width=8)
+        campo.insert(0, str(round(valor * 100, 2)).replace('.', ','))
+        campo.pack(side="left")
+        campos_aliquotas[chave][imposto] = campo
+
+btn_salvar = tk.Button(frame_config, text="Salvar Alíquotas", command=salvar_config)
+btn_salvar.pack(pady=10)
+
+disable_config_fields()
+
+janela.mainloop()
